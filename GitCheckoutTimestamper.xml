@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<meta-runner name="Git checkout timestamper">
+  <description>Timestamps files with gits last change timestamp</description>
+  <settings>
+    <parameters />
+    <build-runners>
+      <runner name="Modify git files timestamp" type="jetbrains_powershell">
+        <parameters>
+          <param name="jetbrains_powershell_bitness" value="x86" />
+          <param name="jetbrains_powershell_execution" value="PS1" />
+          <param name="jetbrains_powershell_noprofile" value="true" />
+          <param name="jetbrains_powershell_script_code"><![CDATA[$repositoryPath = "%teamcity.build.checkoutDir%"
+
+$files = New-Object System.Collections.ArrayList
+
+Write-Host "Reading files..."
+
+gci -Path $repositoryPath -Recurse -Exclude ".git" | ForEach-Object {
+	$files.Add($_.FullName) | Out-Null
+}
+
+Write-Host "Reading git changes..."
+
+$params = @(
+	"--git-dir=$repositoryPath\.git",
+	"whatchanged", 
+	"--pretty=%at"
+	)
+
+$dtDateTime = New-Object DateTime -ArgumentList @(1970,1,1,0,0,0,0);
+
+
+$lastTime = [DateTime]::MinValue
+
+&"git" $params | ForEach-Object {
+	$line = $_
+	
+	$line = $line.Trim()        
+	
+	if($line.Length -gt 0)
+	{
+		if($line.StartsWith(':'))
+		{
+			$cols = $line.Split("`t")
+			$file = Join-Path $repositoryPath $cols[$cols.Length - 1]
+			
+			if($files.Contains($file))
+			{
+				$fileItem = Get-Item $file
+				
+				$fileItem.LastWriteTime = $lastTime
+				
+				$files.Remove($file)
+			}
+		} else {
+			$lastTime = $dtDateTime.AddSeconds([long]::Parse($line)).ToLocalTime()
+		}
+	}
+}]]></param>
+          <param name="jetbrains_powershell_script_mode" value="CODE" />
+          <param name="teamcity.step.mode" value="default" />
+        </parameters>
+      </runner>
+    </build-runners>
+    <requirements>
+      <contains name="teamcity.agent.jvm.os.name" value="Windows" />
+      <exists name="powershell_x64" />
+    </requirements>
+  </settings>
+</meta-runner>
+
